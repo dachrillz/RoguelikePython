@@ -1,0 +1,24 @@
+ 
+SDL2 includes:
+build\dependencies\include\
+ 
+Debug x64 libtcod:
+  build\msvs\libtcod\x64\Debug\libtcod.dll
+  build\msvs\libtcod\x64\Debug\libtcod.pdb
+  build\msvs\libtcod\x64\Debug\libtcod.lib
+ 
+Debug x64 libtcod-gui:
+  build\msvs\libtcod-gui\x64\Debug\libtcod-gui.dll
+  build\msvs\libtcod-gui\x64\Debug\libtcod-gui.pdb
+  build\msvs\libtcod-gui\x64\Debug\libtcod-gui.lib
+ 
+Release x64 libtcod:
+  build\msvs\libtcod\x64\Release\libtcod.dll
+  build\msvs\libtcod\x64\Release\libtcod.pdb
+  build\msvs\libtcod\x64\Release\libtcod.lib
+ 
+Release x64 libtcod-gui:
+  build\msvs\libtcod-gui\x64\Release\libtcod-gui.dll
+  build\msvs\libtcod-gui\x64\Release\libtcod-gui.pdb
+  build\msvs\libtcod-gui\x64\Release\libtcod-gui.lib
+ 
