@@ -16,6 +16,8 @@ LIMIT_FPS = 20
 MAP_WIDTH = 80
 MAP_HEIGHT = 43
 
+INVENTORY_WIDTH = 50
+
 SCREEN_WIDTH = MAP_WIDTH
 SCREEN_HEIGHT = MAP_HEIGHT
 
@@ -28,6 +30,10 @@ FOV_LIGHT_WALLS = True
 TORCH_RADIUS = 10
 
 MAX_ROOM_MONSTER = 3
+MAX_ROOM_ITEMS = 2
+
+#### Item stats
+HEAL_AMOUNT = 5
 
 #sizes and coordinates relevant for the GUI
 BAR_WIDTH = 20
@@ -100,10 +106,87 @@ def message(new_msg, color = libtcod.white):
             
         game_msgs.append( (line, color) )
         
+   
+def menu(header, options, width):
+    if len(options) > 26: raise ValueError('Cannot have a menu with more than 26 options.')
+    
+    #calcualte heig for the header
+    header_height= libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
+    height = len(options) + header_height
+    
+    #create off screen console that represents the menu's window
+    window = libtcod.console_new(width, height)
+    
+    #print the header, with auto-wrap
+    libtcod.console_set_default_foreground(window, libtcod.white)
+    libtcod.console_print_rect_ex(window, 0, 0, width, height, libtcod.BKGND_NONE, libtcod.LEFT, header)
+    
+    #print all the options.
+    y = header_height
+    letter_index = ord('a') #this gets ascii value for 'a'
+    for option_text in options:
+        text = '(' + chr(letter_index) + ') ' + option_text
+        libtcod.console_print_ex(window, 0, y, libtcod.BKGND_NONE, libtcod.LEFT, text)
+        y += 1
+        letter_index += 1
+        
+        
+    #blit the contents of "window" to the root console
+    x = SCREEN_WIDTH/2 - width/2
+    y = SCREEN_HEIGHT/2 - height/2
+    libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
+    
+    
+    #present the root console to the player and wait for a key-press
+    libtcod.console_flush()
+    key = libtcod.console_wait_for_keypress(True)
+    
+    #convert the ASCII code to an index, if it correspondens to an option, return it
+    index = key.c - ord('a')
+    if index >= 0 and index < len(options): return index
+    return None
+    
+    
+def inventory_menu(header):
+    #show a menu with each item of the inventory as an option
+    if len(inventory) == 0:
+        options = ['Inventory is empty.']
+    else:
+        options = [item.name for item in inventory]
+ 
+    index = menu(header, options, INVENTORY_WIDTH) 
+
+    #if an item was chosen, return it
+    if index is None or len(inventory) == 0: return None
+    return inventory[index].item
+
+        
        
 #############################################
 # Classes
 #############################################
+
+class Item:
+    def __init__(self, use_function=None):
+        self.use_function = use_function
+        
+    def use(self):
+        #Just call the "use-function" if it is defined
+        if self.use_function is None:
+            message('The ' + self.owner.name + ' cannot be used.')
+        else:
+            if self.use_function() != 'cancelled':
+                inventory.remove(self.owner) # destroy after use!
+        
+    #an item that can be picked up and used
+    def pick_up(self):
+        #add to the players inventory and remove from the maps
+        if len(inventory) >= 26:
+            message('Your inventory is full, cannot pick up ' + self.owner.name + '.',libtcod.red)
+        else:
+            inventory.append(self.owner)
+            objects.remove(self.owner)
+            message('You picked up a ' + self.owner.name + '!', libtcod.green)
 
 
 class Object:
@@ -111,7 +194,7 @@ class Object:
     A general purpose object that contains functions for: move, draw and clear.
     Takes as input (x, y, char, color)
     """
-    def __init__(self,x, y, char, name, color, blocks = False, fighter = None, ai = None):
+    def __init__(self,x, y, char, name, color, blocks = False, fighter = None, ai = None, item = None):
         self.name = name
         self.blocks = blocks
         self.x = x
@@ -125,6 +208,9 @@ class Object:
         self.ai = ai
         if self.ai:
             self.ai.owner = self
+        self.item = item
+        if self.item:
+            self.item.owner = self
         
     def move(self,dx,dy):
         if not is_blocked(self.x + dx, self.y + dy):
@@ -192,6 +278,13 @@ class Fighter:
             
         else:
             message(self.owner.name.capitalize() + ' attacks ' + target.name + ' but it has no effect!')
+            
+            
+    def heal(self, amount):
+        #heal by the given amount.
+        self.hp += amount
+        if self.hp > self.max_hp:
+            self.hp = self.max_hp
         
 class BasicMonster:
     #Ai for a basic monster
@@ -237,6 +330,21 @@ class Rect:
         return(self.x1 <= other.x2 and self.x2 >= other.x1 and
                self.y1 <= other.y2 and self.y2 >= other.y2)
 
+              
+#############################################
+# Item function
+#############################################
+
+def cast_heal():
+    #heals the player
+    if player.fighter.hp == player.fighter.max_hp:
+        message('You are already at full health.', libtcod.red)
+        return 'cancelled'
+    message('Your wound start to feel better!', libtcod.light_violet)
+    player.fighter.heal(HEAL_AMOUNT)
+    
+               
+               
 #############################################
 # Functions
 #############################################
@@ -333,9 +441,6 @@ def handle_keys():
     elif key.vk == libtcod.KEY_ESCAPE:
         return 'exit' #Exit the game.
         
-        
-
-    
     #movement keys
     if game_state == 'playing':
         if libtcod.console_is_key_pressed(libtcod.KEY_UP):
@@ -348,6 +453,22 @@ def handle_keys():
             player_move_or_attack(1,0)
             
         else:
+            #test for other keys:
+            key_char = chr(key.c)
+            
+            if key_char == 'i':
+                #show the inventory
+                chosen_item = inventory_menu('Press the key next to an item to use it, or any other to cancel.\n')
+                if chosen_item is not None:
+                    chosen_item.use()
+            
+            if key_char == 'g':
+                #pick up item
+                for object in objects:
+                    if object.x == player.x and object.y == player.y and object.item:
+                        object.item.pick_up()
+                        break
+            
             return 'didnt-take-turn'
  
 def create_h_tunnel(x1,x2,y):
@@ -368,8 +489,8 @@ def place_objects(room):
     num_monsters = libtcod.random_get_int(0, 0, MAX_ROOM_MONSTER)
     
     for i in range(num_monsters):
-        x = libtcod.random_get_int(0, room.x1, room.x2)
-        y = libtcod.random_get_int(0, room.y1, room.y2)
+        x = libtcod.random_get_int(0, room.x1 + 1, room.x2 - 1)
+        y = libtcod.random_get_int(0, room.y1 + 1, room.y2 - 1)
         
         if not is_blocked(x,y):
         
@@ -384,6 +505,24 @@ def place_objects(room):
                     blocks = True, fighter = fighter_component, ai = ai_component)
                 
             objects.append(monster)
+            
+            
+    num_items = libtcod.random_get_int(0, 0, MAX_ROOM_ITEMS)
+    
+    for i in range(num_items):
+        #Choose random spot for items
+        x = libtcod.random_get_int(0, room.x1+1, room.x2-1)
+        y = libtcod.random_get_int(0, room.y1+1, room.y2-1)
+        
+        #only place if tiled not blocked
+        if not is_blocked(x, y):
+            #create healing potion
+            item_component = Item(use_function=cast_heal)
+            item = Object(x, y, '!', 'healing potion', libtcod.violet, item = item_component)
+            
+            objects.append(item)
+            
+            item.send_to_back()
  
 def is_blocked(x, y):
     #First test the map tile
@@ -417,7 +556,6 @@ def player_move_or_attack(dx,dy):
     else:
         player.move(dx,dy)
         fov_recompute = True
-
 
  
 def render_all():
@@ -529,6 +667,9 @@ for y in range(MAP_HEIGHT):
 fov_recompute = True
 game_state = 'playing'
 player_action = None
+
+#Define inventory
+inventory = []
 
 #create the list of game messages and their colors, starts empty
 game_msgs = []
