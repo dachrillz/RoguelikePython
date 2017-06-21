@@ -17,6 +17,7 @@ Example:
 import libtcodpy as libtcod
 import math
 import textwrap
+import shelve
 
 #Finals
 LIMIT_FPS = 20
@@ -119,12 +120,19 @@ def message(new_msg, color = libtcod.white):
             
         game_msgs.append( (line, color) )
         
+        
+def msgbox(text, width=50):
+    menu(text, [], width)  #use menu() as a sort of "message box"
+        
    
 def menu(header, options, width):
     if len(options) > 26: raise ValueError('Cannot have a menu with more than 26 options.')
     
-    #calcualte heig for the header
-    header_height= libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
+    #calcualte height for the header
+    if header == '':
+        header_height = 0
+    else:
+        header_height= libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
     height = len(options) + header_height
     
     #create off screen console that represents the menu's window
@@ -154,6 +162,11 @@ def menu(header, options, width):
     libtcod.console_flush()
     key = libtcod.console_wait_for_keypress(True)
     
+    #Toggle full screen from a menu.
+    
+    if key.vk == libtcod.KEY_ENTER and key.lalt:  #(special case) Alt+Enter: toggle fullscreen
+        libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
+    
     #convert the ASCII code to an index, if it correspondens to an option, return it
     index = key.c - ord('a')
     if index >= 0 and index < len(options): return index
@@ -166,13 +179,29 @@ def main_menu():
         #show the background image, at twice the regular console resolution
         libtcod.image_blit_2x(img,0,0,0)
         
-        #show optionsand wait for the players choice
+        #call some fluff
+        #show the game's title, and some credits!
+        libtcod.console_set_default_foreground(0, libtcod.light_yellow)
+        libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT/2-4, libtcod.BKGND_NONE, libtcod.CENTER,
+            'TOMBS OF THE ANCIENT KINGS')
+        libtcod.console_print_ex(0, SCREEN_WIDTH/2, SCREEN_HEIGHT-2, libtcod.BKGND_NONE, libtcod.CENTER,
+            'By Crule')
+        
+        #show options and wait for the players choice
         choice = menu('', ['Play a new game', 'Continue last game', 'Quit'], 24)
         
         if choice == 0: #new game
             new_game()
             play_game()
-        elif choice == 2: #quit
+        if choice == 1:
+            try:
+                load_game()
+            except:
+                msgbox('\n No saved game to load.\n', 24)
+                continue
+            play_game()
+         
+        if choice == 2: #quit
             break
     
     
@@ -830,7 +859,42 @@ def monster_death(monster):
     monster.name = 'remains of ' + monster.name
     monster.send_to_back()
 
+#############################################
+# Save and load game
+#############################################
 
+def save_game():
+    #open a new empty shelve (possibly overwriting an olde one)
+    file = shelve.open('savegame', 'n')
+    '''
+    #Keep in mind, save all important objects in the game!
+    '''
+    file['map'] = map
+    file['objects'] = objects
+    
+    #index of player in objects list
+    file['player_index'] = objects.index(player)  #index of player in objects list
+    
+    file['inventory'] = inventory
+    file['game_msgs'] = game_msgs
+    file['game_state'] = game_state
+    
+    file.close()
+    
+def load_game():
+    #open the previously saved shelve and load the game data
+    global map, objects, player, inventory, game_msgs, game_state
+ 
+    file = shelve.open('savegame', 'r')
+    map = file['map']
+    objects = file['objects']
+    player = objects[file['player_index']]  #get index of player in objects list and access it
+    inventory = file['inventory']
+    game_msgs = file['game_msgs']
+    game_state = file['game_state']
+    file.close()
+ 
+    initialize_fov()
 
 #############################################
 # Initialization & Main Loop
@@ -877,6 +941,9 @@ def initialize_fov():
         for x in range(MAP_WIDTH):
             libtcod.map_set_properties(fov_map, x, y, not map[x][y].block_sight, not map[x][y].blocked)
 
+    libtcod.console_clear(con)  #unexplored areas start black (which is the default background color)
+
+    
 def play_game():
     global key,mouse
 
@@ -902,6 +969,8 @@ def play_game():
         
         player_action = handle_keys()
         if player_action == 'exit':
+            
+            save_game() # save the game!
             break
         
         #Let monsters take a turn
@@ -914,6 +983,7 @@ def play_game():
 
 #Limit the games speed
 libtcod.sys_set_fps(LIMIT_FPS)
+
 
 #GO!
 main_menu()
