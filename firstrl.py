@@ -159,6 +159,23 @@ def menu(header, options, width):
     if index >= 0 and index < len(options): return index
     return None
     
+def main_menu():
+    img = libtcod.image_load('menu_background1.png')
+    
+    while not libtcod.console_is_window_closed():
+        #show the background image, at twice the regular console resolution
+        libtcod.image_blit_2x(img,0,0,0)
+        
+        #show optionsand wait for the players choice
+        choice = menu('', ['Play a new game', 'Continue last game', 'Quit'], 24)
+        
+        if choice == 0: #new game
+            new_game()
+            play_game()
+        elif choice == 2: #quit
+            break
+    
+    
     
 def inventory_menu(header):
     #show a menu with each item of the inventory as an option
@@ -899,8 +916,7 @@ def play_game():
 libtcod.sys_set_fps(LIMIT_FPS)
 
 #GO!
-new_game()
-play_game()
+main_menu()
 
 
 
