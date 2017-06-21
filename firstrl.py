@@ -456,7 +456,10 @@ def closest_monster(max_range):
 #############################################
 
 def make_map():
-    global map
+    global map, objects
+    
+    #create the object list
+    objects = [player]
     
     #fill map with "unblocked" tiles
     map = [[ Tile(True)
@@ -816,65 +819,89 @@ def monster_death(monster):
 # Initialization & Main Loop
 #############################################
 
-#Initialize objects
-fighter_component = Fighter(hp=30, defense = 2, power = 5, death_function = player_death)
-player = Object(0,0, '@','player', libtcod.white, blocks = True, fighter=fighter_component)
-objects = [player]
-make_map()
+def new_game():
+    global player, inventory, game_msgs, game_state
 
-fov_map = libtcod.map_new(MAP_WIDTH,MAP_HEIGHT)
-for y in range(MAP_HEIGHT):
-    for x in range(MAP_WIDTH):
-        libtcod.map_set_properties(fov_map, x, y, not map[x][y].block_sight, not map[x][y].blocked)
+    #Initialize objects
+    fighter_component = Fighter(hp=30, defense = 2, power = 5, death_function = player_death)
+    player = Object(0,0, '@','player', libtcod.white, blocks = True, fighter=fighter_component)
+    
+    #generate map
+    make_map()
+    
+    #initialize the fov_map
+    initialize_fov()
+    
+    #Define inventory
+    inventory = []
+    
+    #get cheat items
+    #cheats, (cast_heal,cast_lightning, cast_confuse,cast_fireball)
+    cheat_item(cast_lightning, 'cheated item')
+    cheat_item(cast_confuse, 'cheated item 1 ')
+    cheat_item(cast_fireball, 'cheated item 2')
+    
+    #set the game state
+    game_state = 'playing'
+    
+    #create the list of game messages and their colors, starts empty
+    game_msgs = []
+    
+    #a warm welcoming message!
+    message('Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.', libtcod.red)
+
+def initialize_fov():
+    global fov_recompute, fov_map
+    
+    fov_recompute = True
+    
+    fov_map = libtcod.map_new(MAP_WIDTH,MAP_HEIGHT)
+    for y in range(MAP_HEIGHT):
+        for x in range(MAP_WIDTH):
+            libtcod.map_set_properties(fov_map, x, y, not map[x][y].block_sight, not map[x][y].blocked)
+
+def play_game():
+    global key,mouse
+
+    player_action = None
+
+    mouse = libtcod.Mouse()
+    key = libtcod.Key()
+    
+    #Game main loop
+    while not libtcod.console_is_window_closed():
+        libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE,key,mouse)
+        
+        #Draw all objects in the list
+        render_all()
+        
+        
+        libtcod.console_flush()
+        
+        #This flushes the screen
+        for object in objects:
+            object.clear()
+        
+        
+        player_action = handle_keys()
+        if player_action == 'exit':
+            break
+        
+        #Let monsters take a turn
+        if game_state == 'playing' and player_action != 'didnt-take-turn':
+            for object in objects:
+                if object.ai:
+                    object.ai.take_turn()
 
 
-fov_recompute = True
-game_state = 'playing'
-player_action = None
-
-#Define inventory
-inventory = []
-
-#create the list of game messages and their colors, starts empty
-game_msgs = []
-
-#a warm welcoming message!
-message('Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.', libtcod.red)
-
-mouse = libtcod.Mouse()
-key = libtcod.Key()
 
 #Limit the games speed
 libtcod.sys_set_fps(LIMIT_FPS)
 
+#GO!
+new_game()
+play_game()
 
-#cheats, (cast_heal,cast_lightning, cast_confuse,cast_fireball)
-cheat_item(cast_lightning, 'cheated item')
-cheat_item(cast_confuse, 'cheated item 1 ')
-cheat_item(cast_fireball, 'cheated item 2')
 
-#Game main loop
-while not libtcod.console_is_window_closed():
-    libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE,key,mouse)
-    
-    #Draw all objects in the list
-    render_all()
-    
-    
-    libtcod.console_flush()
-    
-    #This flushes the screen
-    for object in objects:
-        object.clear()
-    
-    
-    player_action = handle_keys()
-    if player_action == 'exit':
-        break
-    
-    #Let monsters take a turn
-    if game_state == 'playing' and player_action != 'didnt-take-turn':
-        for object in objects:
-            if object.ai:
-                object.ai.take_turn()
+
 
